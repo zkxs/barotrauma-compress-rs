@@ -1,0 +1,94 @@
+# Copyright 2023 Michael Ripley
+# This file is part of barotrauma-compress.
+# barotrauma-compress is licensed under the AGPL-3.0 license (see LICENSE file for details).
+
+name: Build
+on: push
+jobs:
+  cargo-deny:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: EmbarkStudios/cargo-deny-action@v1
+  build:
+    if: startsWith(github.ref, 'refs/tags/') || github.ref == 'refs/heads/master' # only run for pushes to tags or master
+    strategy:
+      matrix:
+        target:
+          - runs-on: windows-latest
+            triple: x86_64-pc-windows-msvc
+            build-name: Windows
+            artifact-name: windows
+            suffix: .exe
+            path-separator: '\'
+            runner-can-execute: true
+          - runs-on: ubuntu-latest
+            triple: x86_64-unknown-linux-gnu
+            build-name: Linux
+            artifact-name: linux
+            suffix: ''
+            path-separator: '/'
+            runner-can-execute: true
+          - runs-on: macos-latest
+            triple: x86_64-apple-darwin
+            build-name: macOS x86
+            artifact-name: mac-x86
+            suffix: ''
+            path-separator: '/'
+            runner-can-execute: true
+          - runs-on: macos-latest
+            triple: aarch64-apple-darwin
+            build-name: macOS ARM
+            artifact-name: mac-arm
+            suffix: ''
+            path-separator: '/'
+            runner-can-execute: false
+      fail-fast: false
+    name: Build ${{ matrix.target.build-name }}
+    runs-on: ${{ matrix.target.runs-on }}
+    steps:
+      - name: git checkout
+        uses: actions/checkout@v3
+      - name: Setup workflow cache
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+      - name: Setup Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          target: ${{ matrix.target.triple }}
+      - name: Test
+        run: cargo test
+      - name: Build
+        run: cargo build --release --target ${{ matrix.target.triple }}
+      - name: Self-check
+        if: matrix.target.runner-can-execute
+        run: ./target/${{ matrix.target.triple }}/release/barotrauma-compress${{ matrix.target.suffix }} --self-check
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: barotrauma-compress-${{ matrix.target.triple }}
+          path: ./target/${{ matrix.target.triple }}/release/barotrauma-compress${{ matrix.target.suffix }}
+          if-no-files-found: error
+      - name: Rename artifact for release # action-gh-release is incapable of renaming files, so I have to do it manually
+        if: startsWith(github.ref, 'refs/tags/') # only run for pushes to tags
+        run: |
+          cp "./target/${{ matrix.target.triple }}/release/barotrauma-compress${{ matrix.target.suffix }}" "${{ runner.temp }}/barotrauma-compress-${{ matrix.target.artifact-name }}${{ matrix.target.suffix }}"
+          ls "${{ runner.temp }}"
+          file "${{ runner.temp }}${{ matrix.target.path-separator }}barotrauma-compress-${{ matrix.target.artifact-name }}${{ matrix.target.suffix }}"
+        shell: bash
+      - name: Upload release artifact
+        uses: softprops/action-gh-release@v0.1.14
+        if: startsWith(github.ref, 'refs/tags/') # only run for pushes to tags
+        with:
+          draft: true
+          files: ${{ runner.temp }}${{ matrix.target.path-separator }}barotrauma-compress-${{ matrix.target.artifact-name }}${{ matrix.target.suffix }}
+          fail_on_unmatched_files: true
