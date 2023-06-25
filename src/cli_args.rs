@@ -3,6 +3,7 @@
 // barotrauma-compress is licensed under the AGPL-3.0 license (see LICENSE file for details).
 
 use std::path::PathBuf;
+
 use clap::Parser;
 
 /// A utility to compress and decompress Barotrauma saves. Whether to compress or decompress will be

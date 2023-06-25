@@ -32,18 +32,18 @@ fn main() -> ExitCode {
 
 fn handle_args() -> Result<(), String> {
     let args: CliArgs = CliArgs::parse();
-    debug_println!("Target: {}", args.input.display());
+    debug_println!("Input: {}", args.input.display());
 
     if args.input.is_file() {
         decompress(args.input).map_err(|e| format!("Error performing decompress operation: {e}"))
     } else if args.input.is_dir() {
         compress(args.input).map_err(|e| format!("Error performing compress operation: {e}"))
     } else {
-        Err("Could not open target as a file or directory. Does it exist?".to_string())
+        Err("Could not open input as a file or directory. Does it exist?".to_string())
     }
 }
 
-// source: https://docs.rs/debug_print/latest/src/debug_print/lib.rs.html
+// source: https://docs.rs/debug_print/1.0.0/src/debug_print/lib.rs.html#49-52
 // licensed under MIT OR Apache-2.0
 #[macro_export]
 macro_rules! debug_println {
@@ -51,7 +51,6 @@ macro_rules! debug_println {
 }
 
 fn decompress(file_path: PathBuf) -> Result<(), String> {
-
     // open the save file
     let file = File::open(&file_path).map_err(|e| format!("Could not open save file: {}", e))?;
     let gzip_input = BufReader::new(file);
@@ -99,7 +98,7 @@ fn decompress(file_path: PathBuf) -> Result<(), String> {
             if let (&mut [], bytes, &mut []) = filename_buffer.align_to_mut() {
                 bytes
             } else {
-                unreachable!("Vec::<u16> is always u8-aligned");
+                unreachable!("Vec<u16> is always u8-aligned");
             }
         };
 
@@ -134,26 +133,32 @@ fn decompress(file_path: PathBuf) -> Result<(), String> {
 fn compress(directory_path: PathBuf) -> Result<(), String> {
     let file_path: PathBuf = directory_path.with_extension("save");
 
+    // enumerate files in the input directory
     let mut input_file_paths = Vec::with_capacity(2);
-    for entry in fs::read_dir(directory_path).map_err(|e| format!("Unable to enumerate target directory: {}", e))? {
-        let entry = entry.map_err(|e| format!("Unable to read an entry while enumerating the target directory: {}", e))?;
+    for entry in fs::read_dir(directory_path).map_err(|e| format!("Unable to enumerate input directory: {}", e))? {
+        let entry = entry.map_err(|e| format!("Unable to read an entry while enumerating the input directory: {}", e))?;
         let path = entry.path();
         if !path.is_file() {
+            // the directory must be flat... I think? If baro supports directory structure then color me surprised.
             return Err(format!("Unable to compress nested directories: \"{}\"", path.display()));
         }
         input_file_paths.push(path);
     }
 
+    // ensure the output file doesn't already exist, as I don't want users to accidentally clobber their saves
     if file_path.exists() {
         return Err(format!("Target file \"{}\" already exists", file_path.display()));
     }
 
+    // create the output file
     let output_file = File::create(file_path).map_err(|e| format!("Unable to create output file: {}", e))?;
+    // I do three small writes in a row for file metadata, so we buffer the writer here
     let gzip_output = BufWriter::new(output_file);
     debug_println!("fs write buffer size = {}", gzip_output.capacity());
     // default compression is *probably* fine
     let mut output = GzEncoder::new(gzip_output, Compression::default());
 
+    // add each file to the gzip
     for input_file_path in input_file_paths {
         debug_println!("processing: {}", input_file_path.display());
         let mut input_file = File::open(&input_file_path).map_err(|e| format!("Unable to open input file: {}", e))?;
@@ -167,7 +172,7 @@ fn compress(directory_path: PathBuf) -> Result<(), String> {
             if let (&mut [], bytes, &mut []) = input_filename_utf16.align_to_mut() {
                 bytes
             } else {
-                unreachable!("Vec::<u16> is always u8-aligned");
+                unreachable!("Vec<u16> is always u8-aligned");
             }
         };
 
@@ -188,6 +193,7 @@ fn compress(directory_path: PathBuf) -> Result<(), String> {
         io::copy(&mut input_file, &mut output).map_err(|e| format!("Error writing input file to save: {}", e))?;
     }
 
+    // because we're using a BufWriter we should explicitly flush to disk
     output.flush().map_err(|e| format!("Error flushing save to disk: {}", e))?;
     Ok(())
 }

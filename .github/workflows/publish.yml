@@ -1,3 +1,7 @@
+# Copyright 2023 Michael Ripley
+# This file is part of barotrauma-compress.
+# barotrauma-compress is licensed under the AGPL-3.0 license (see LICENSE file for details).
+
 name: Publish
 on:
   workflow_dispatch:
