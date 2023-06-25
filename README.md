@@ -10,8 +10,6 @@ A simple CLI utility compress and decompress Barotrauma save files using fully c
 
 ## Usage
 
-Grab an 
-
 Whether to compress or decompress will be chosen automatically based on what `<INPUT>` is: files will be decompressed, and directories will be compressed.
 
 ```
