@@ -1,6 +1,6 @@
 [package]
 name = "barotrauma-compress"
-version = "1.0.0"
+version = "1.1.0"
 authors = ["Michael Ripley <zkxs00@gmail.com>"]
 edition = "2021"
 description = "Compress and decompress Barotrauma save files"
