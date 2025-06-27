@@ -4,9 +4,9 @@
 
 //! Compress and decompress barotrauma save files.
 
+use flate2::Compression;
 use flate2::bufread::GzDecoder;
 use flate2::write::GzEncoder;
-use flate2::Compression;
 use std::fs::File;
 use std::io::{BufReader, BufWriter, Read, Write};
 use std::mem::MaybeUninit;
