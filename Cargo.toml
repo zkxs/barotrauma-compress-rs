@@ -12,6 +12,13 @@ categories = ["command-line-utilities"]
 
 [profile.release]
 lto = "fat"
+codegen-units = 1
+strip = true
+
+[profile.release-optimized-debug]
+inherits = "release"
+strip = false # required for `cargo-bloat`
+debug = true # required for `cargo flamegraph`, and makes `cargo-bloat` output significantly better
 
 [dependencies]
 clap = { version = "4", features = ["derive"] }
