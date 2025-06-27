@@ -2,13 +2,15 @@
 // This file is part of barotrauma-compress.
 // barotrauma-compress is licensed under the AGPL-3.0 license (see LICENSE file for details).
 
+//! Compress and decompress barotrauma save files.
+
 use flate2::bufread::GzDecoder;
 use flate2::write::GzEncoder;
 use flate2::Compression;
 use std::fs::File;
 use std::io::{BufReader, BufWriter, Read, Write};
 use std::mem::MaybeUninit;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::{fs, io};
 
 const INITIAL_FILENAME_BUFFER_SIZE: usize = 256;
@@ -19,7 +21,9 @@ macro_rules! debug_println {
     ($($arg:tt)*) => (#[cfg(debug_assertions)] println!($($arg)*));
 }
 
-pub fn decompress(file_path: PathBuf) -> Result<(), String> {
+/// Given `file_path`, a path to a .save file, decompress the save into a new directory next to the save file.
+/// This will fail if the output directory already exists.
+pub fn decompress<P: AsRef<Path>>(file_path: P) -> Result<(), String> {
     // open the save file
     let file = File::open(&file_path).map_err(|e| format!("Could not open save file: {}", e))?;
     let gzip_input = BufReader::new(file);
@@ -29,10 +33,12 @@ pub fn decompress(file_path: PathBuf) -> Result<(), String> {
 
     // create the output directory
     let directory_path: PathBuf = file_path
+        .as_ref()
         .parent()
         .ok_or("Could not get parent directory of save file")?
         .join(
             file_path
+                .as_ref()
                 .file_stem()
                 .ok_or("Could not remove extension from save file")?,
         );
@@ -118,8 +124,10 @@ pub fn decompress(file_path: PathBuf) -> Result<(), String> {
     Ok(())
 }
 
-pub fn compress(directory_path: PathBuf) -> Result<(), String> {
-    let file_path: PathBuf = directory_path.with_extension("save");
+/// Give `directory_path`, a path to a decompressed barotrauma save directory, compress it into a new .save file next
+/// to the directory. This will fail if the output file already exists.
+pub fn compress<P: AsRef<Path>>(directory_path: P) -> Result<(), String> {
+    let file_path: PathBuf = directory_path.as_ref().with_extension("save");
 
     // enumerate files in the input directory
     let mut input_file_paths = Vec::with_capacity(2);
