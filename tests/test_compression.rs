@@ -1,3 +1,6 @@
+// this is just a test, so I'm playing fast and loose with panics
+#![allow(clippy::unwrap_used, clippy::expect_used)]
+
 use barotrauma_compress::{compress, decompress};
 use std::error::Error;
 use std::fmt::{Display, Formatter};
@@ -103,13 +106,13 @@ impl Error for UnknownEntryType {}
 /// Assert two directory trees are byte-for-byte equal in every file.
 fn assert_dirs_equal(dir_a: impl AsRef<Path>, dir_b: impl AsRef<Path>) {
     let dir_a_owned = dir_a.as_ref().to_owned();
-    let walkdir_a = WalkDir::new(&dir_a).sort_by(move |a, b| {
+    let walkdir_a = WalkDir::new(&dir_a).min_depth(1).sort_by(move |a, b| {
         let a_stripped = a.path().strip_prefix(&dir_a_owned).unwrap();
         let b_stripped = b.path().strip_prefix(&dir_a_owned).unwrap();
         a_stripped.cmp(b_stripped)
     });
     let dir_b_owned = dir_b.as_ref().to_owned();
-    let walkdir_b = WalkDir::new(&dir_b).sort_by(move |a, b| {
+    let walkdir_b = WalkDir::new(&dir_b).min_depth(1).sort_by(move |a, b| {
         let a_stripped = a.path().strip_prefix(&dir_b_owned).unwrap();
         let b_stripped = b.path().strip_prefix(&dir_b_owned).unwrap();
         a_stripped.cmp(b_stripped)
@@ -135,7 +138,7 @@ fn assert_dirs_equal(dir_a: impl AsRef<Path>, dir_b: impl AsRef<Path>) {
                 "file length differs"
             );
 
-            const BUFFER_SIZE: usize = 4096;
+            const BUFFER_SIZE: usize = 8 * 1024;
             let mut buf_a: [u8; BUFFER_SIZE] = [0; BUFFER_SIZE];
             let mut buf_b: [u8; BUFFER_SIZE] = [0; BUFFER_SIZE];
             loop {

@@ -23,7 +23,17 @@ debug = true # required for `cargo flamegraph`, and makes `cargo-bloat` output s
 [dependencies]
 clap = { version = "4", features = ["derive"] }
 flate2 = { version = "1", default-features = false, features = ["zlib-rs"] }
+zerocopy = "0.8"
 
 [dev-dependencies]
 tempfile = "3"
 walkdir = "2"
+
+[lints.clippy]
+dbg_macro = "deny"
+todo = "deny"
+unwrap_used = "deny"
+expect_used = "deny"
+undocumented_unsafe_blocks = "deny"
+unnecessary_safety_comment = "warn"
+path_buf_push_overwrite = "deny"

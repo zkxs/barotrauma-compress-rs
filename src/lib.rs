@@ -12,7 +12,10 @@ use std::io::{BufReader, BufWriter, Read, Write};
 use std::mem::MaybeUninit;
 use std::path::{Path, PathBuf};
 use std::{fs, io};
+use zerocopy::IntoBytes;
 
+/// Some arbitrary guess as to how long a really long filename might be, in utf16 code units.
+/// It's fine if we're wrong, as the buffer is growable.
 const INITIAL_FILENAME_BUFFER_SIZE: usize = 256;
 
 // source: https://docs.rs/debug_print/1.0.0/src/debug_print/lib.rs.html#49-52
@@ -51,9 +54,10 @@ pub fn decompress<P: AsRef<Path>>(file_path: P) -> Result<(), String> {
         )
     })?;
 
+    // SAFETY: buffer must not be read before it is written. This is done as the very first thing in the following loop,
+    // so this is fine.
     let mut length_buffer: [u8; 4] = unsafe {
         #[allow(clippy::uninit_assumed_init, invalid_value)]
-        // oh no~ there might be GARBAGE in my bytes, whatever will I do?
         MaybeUninit::uninit().assume_init()
     };
 
@@ -77,22 +81,14 @@ pub fn decompress<P: AsRef<Path>>(file_path: P) -> Result<(), String> {
         }
 
         // size the underlying slice to the necessary size without zeroing
+        // SAFETY: all data must be written before it is read. We immediately do a `read_exact` call to perform said write.
         unsafe {
             filename_buffer.set_len(filename_length);
         }
 
-        // cast the filename buffer to a u8 slice for writing
-        let filename_buffer_u8: &mut [u8] = unsafe {
-            if let (&mut [], bytes, &mut []) = filename_buffer.align_to_mut() {
-                bytes
-            } else {
-                unreachable!("Vec<u16> is always u8-aligned");
-            }
-        };
-
         // read the dang filename, finally
         input
-            .read_exact(filename_buffer_u8)
+            .read_exact(filename_buffer.as_mut_bytes())
             .map_err(|e| format!("Reached end of stream unexpectedly when reading filename: {}", e))?;
         let filename =
             String::from_utf16(&filename_buffer).map_err(|e| format!("Filename was not valid UTF-16: {}", e))?;
@@ -112,10 +108,9 @@ pub fn decompress<P: AsRef<Path>>(file_path: P) -> Result<(), String> {
 
         let mut output_file_reader = input.take(file_length);
 
-        // I don't think we need to buffer the writes for this, so I don't. There's no BufWriter in the decompress function.
         let bytes_written = io::copy(&mut output_file_reader, &mut output_file)
             .map_err(|e| format!("Error writing decompressed file: {}", e))?;
-        assert_eq!(bytes_written, file_length);
+        assert_eq!(bytes_written, file_length, "unexpected number of bytes written to file");
         input = output_file_reader.into_inner();
 
         debug_println!("wrote {}", output_file_path.display());
@@ -155,6 +150,9 @@ pub fn compress<P: AsRef<Path>>(directory_path: P) -> Result<(), String> {
     // default compression is *probably* fine
     let mut output = GzEncoder::new(gzip_output, Compression::default());
 
+    // this buffer is specifically for holding u16-aligned filenames
+    let mut filename_buffer = Vec::<u16>::with_capacity(INITIAL_FILENAME_BUFFER_SIZE);
+
     // add each file to the gzip
     for input_file_path in input_file_paths {
         debug_println!("processing: {}", input_file_path.display());
@@ -167,15 +165,8 @@ pub fn compress<P: AsRef<Path>>(directory_path: P) -> Result<(), String> {
             .to_str()
             .ok_or("Unable to convert input filename to unicode")?;
         let input_filename_length = input_filename.len() as u32;
-        // there is no `encode_utf16_into`, so unfortunately this allocates TODO
-        let mut input_filename_utf16: Vec<u16> = input_filename.encode_utf16().collect();
-        let input_filename_buffer_u8: &[u8] = unsafe {
-            if let (&mut [], bytes, &mut []) = input_filename_utf16.align_to_mut() {
-                bytes
-            } else {
-                unreachable!("Vec<u16> is always u8-aligned");
-            }
-        };
+        filename_buffer.clear();
+        filename_buffer.extend(input_filename.encode_utf16());
 
         // write the filename length prefix
         let input_filename_length_prefix = input_filename_length.to_le_bytes();
@@ -185,7 +176,7 @@ pub fn compress<P: AsRef<Path>>(directory_path: P) -> Result<(), String> {
 
         // write the filename
         output
-            .write_all(input_filename_buffer_u8)
+            .write_all(filename_buffer.as_bytes())
             .map_err(|e| format!("Unable to write filename to save: {}", e))?;
 
         // write the file size prefix
@@ -208,7 +199,7 @@ pub fn compress<P: AsRef<Path>>(directory_path: P) -> Result<(), String> {
         io::copy(&mut input_file, &mut output).map_err(|e| format!("Error writing input file to save: {}", e))?;
     }
 
-    // because we're using a BufWriter we should explicitly flush to disk
+    // because we're using a BufWriter we should explicitly flush to disk so we can handle any errors
     output
         .flush()
         .map_err(|e| format!("Error flushing save to disk: {}", e))?;
