@@ -2,7 +2,7 @@
 name = "barotrauma-compress"
 version = "1.1.0"
 authors = ["Michael Ripley <zkxs00@gmail.com>"]
-edition = "2021"
+edition = "2024"
 description = "Compress and decompress Barotrauma save files"
 readme = "README.md"
 repository = "https://github.com/zkxs/barotrauma-compress-rs"
