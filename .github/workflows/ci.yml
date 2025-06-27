@@ -2,21 +2,22 @@
 # This file is part of barotrauma-compress.
 # barotrauma-compress is licensed under the AGPL-3.0 license (see LICENSE file for details).
 
-name: Build
+name: CI
 on:
-  push:
+  pull_request:
+    branches: # run for pull requests that target master or prerelease
+      - master
+      - prerelease
     paths-ignore: # ignore files that can't alter build output
       - '**.md'
       - .github/dependabot.yml
-      - .github/workflows/ci.yml
+      - .github/workflows/build.yml
       - .github/workflows/publish.yml
       - .gitignore
       - docs/**
       - LICENSE
 jobs:
   cargo-deny:
-    # only run for pushes to tags or non-dependabot branches
-    if: startsWith(github.ref, 'refs/tags/') || (startsWith(github.ref, 'refs/heads/') && !startsWith(github.ref, 'refs/heads/dependabot/'))
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -24,8 +25,6 @@ jobs:
         with:
           rust-version: "1.85.0"
   cargo-fmt:
-    # only run for pushes to tags or non-dependabot branches
-    if: startsWith(github.ref, 'refs/tags/') || (startsWith(github.ref, 'refs/heads/') && !startsWith(github.ref, 'refs/heads/dependabot/'))
     runs-on: ubuntu-latest
     steps:
       - name: Update Rust Toolchain
@@ -37,9 +36,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: Format
         run: cargo fmt --check
-  build:
-    # only run for pushes to tags or non-dependabot branches
-    if: startsWith(github.ref, 'refs/tags/') || (startsWith(github.ref, 'refs/heads/') && !startsWith(github.ref, 'refs/heads/dependabot/'))
+  test:
     strategy:
       matrix:
         target:
@@ -72,11 +69,9 @@ jobs:
             path-separator: '/'
             runner-can-execute: true
       fail-fast: false
-    name: Build ${{ matrix.target.build-name }}
+    name: Test ${{ matrix.target.build-name }}
     runs-on: ${{ matrix.target.runs-on }}
     steps:
-      - name: Update Rust Toolchain
-        run: rustup update
       - name: Install Rust target
         run: rustup target add ${{ matrix.target.triple }}
       - name: Install Cargo
@@ -100,25 +95,3 @@ jobs:
       - name: Test
         if: matrix.target.runner-can-execute
         run: cargo test --target ${{ matrix.target.triple }}
-      - name: Build
-        run: cargo build --release --target ${{ matrix.target.triple }}
-      - name: Upload workflow artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: barotrauma-compress-${{ matrix.target.triple }}
-          path: ./target/${{ matrix.target.triple }}/release/barotrauma-compress${{ matrix.target.suffix }}
-          if-no-files-found: error
-      - name: Rename artifact for release # action-gh-release is incapable of renaming files, so I have to do it manually
-        if: startsWith(github.ref, 'refs/tags/') # only run for pushes to tags
-        run: |
-          cp "./target/${{ matrix.target.triple }}/release/barotrauma-compress${{ matrix.target.suffix }}" "${{ runner.temp }}/barotrauma-compress${{ matrix.target.artifact-suffix }}${{ matrix.target.suffix }}"
-          ls "${{ runner.temp }}"
-          file "${{ runner.temp }}${{ matrix.target.path-separator }}barotrauma-compress${{ matrix.target.artifact-suffix }}${{ matrix.target.suffix }}"
-        shell: bash
-      - name: Upload release artifact
-        uses: softprops/action-gh-release@v0.1.14
-        if: startsWith(github.ref, 'refs/tags/') # only run for pushes to tags
-        with:
-          draft: true
-          files: ${{ runner.temp }}${{ matrix.target.path-separator }}barotrauma-compress${{ matrix.target.artifact-suffix }}${{ matrix.target.suffix }}
-          fail_on_unmatched_files: true
