@@ -22,7 +22,7 @@ debug = true # required for `cargo flamegraph`, and makes `cargo-bloat` output s
 
 [dependencies]
 clap = { version = "4", features = ["derive"] }
-flate2 = "1.0"
+flate2 = { version = "1", default-features = false, features = ["zlib-rs"] }
 
 [dev-dependencies]
 tempfile = "3"
