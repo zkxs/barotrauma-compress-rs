@@ -2,17 +2,17 @@
 // This file is part of barotrauma-compress.
 // barotrauma-compress is licensed under the AGPL-3.0 license (see LICENSE file for details).
 
-use std::{fs, io};
 use std::fs::File;
 use std::io::{BufReader, BufWriter, Read, Write};
 use std::mem::MaybeUninit;
 use std::path::PathBuf;
 use std::process::ExitCode;
+use std::{fs, io};
 
 use clap::Parser as _;
 use flate2::bufread::GzDecoder;
-use flate2::Compression;
 use flate2::write::GzEncoder;
+use flate2::Compression;
 
 use crate::cli_args::CliArgs;
 
@@ -59,13 +59,27 @@ fn decompress(file_path: PathBuf) -> Result<(), String> {
     let mut input = GzDecoder::new(gzip_input);
 
     // create the output directory
-    let mut directory_path: PathBuf = file_path.parent().ok_or("Could not get parent directory of save file")?.to_path_buf();
-    directory_path.push(file_path.file_stem().ok_or("Could not remove extension from save file")?);
+    let mut directory_path: PathBuf = file_path
+        .parent()
+        .ok_or("Could not get parent directory of save file")?
+        .to_path_buf();
+    directory_path.push(
+        file_path
+            .file_stem()
+            .ok_or("Could not remove extension from save file")?,
+    );
     debug_println!("directory_path = {}", directory_path.display());
-    fs::create_dir(&directory_path).map_err(|e| format!("Could not create target directory \"{}\": {}", directory_path.display(), e))?;
+    fs::create_dir(&directory_path).map_err(|e| {
+        format!(
+            "Could not create target directory \"{}\": {}",
+            directory_path.display(),
+            e
+        )
+    })?;
 
     let mut length_buffer: [u8; 4] = unsafe {
-        #[allow(clippy::uninit_assumed_init, invalid_value)] // oh no~ there might be GARBAGE in my bytes, whatever will I do?
+        #[allow(clippy::uninit_assumed_init, invalid_value)]
+        // oh no~ there might be GARBAGE in my bytes, whatever will I do?
         MaybeUninit::uninit().assume_init()
     };
 
@@ -103,24 +117,31 @@ fn decompress(file_path: PathBuf) -> Result<(), String> {
         };
 
         // read the dang filename, finally
-        input.read_exact(filename_buffer_u8).map_err(|e| format!("Reached end of stream unexpectedly when reading filename: {}", e))?;
-        let filename = String::from_utf16(&filename_buffer).map_err(|e| format!("Filename was not valid UTF-16: {}", e))?;
+        input
+            .read_exact(filename_buffer_u8)
+            .map_err(|e| format!("Reached end of stream unexpectedly when reading filename: {}", e))?;
+        let filename =
+            String::from_utf16(&filename_buffer).map_err(|e| format!("Filename was not valid UTF-16: {}", e))?;
         debug_println!("Decoded filename: {}", filename);
 
         // get the file length
-        input.read_exact(&mut length_buffer).map_err(|e| format!("Reached end of stream unexpectedly when reading file length: {}", e))?;
+        input
+            .read_exact(&mut length_buffer)
+            .map_err(|e| format!("Reached end of stream unexpectedly when reading file length: {}", e))?;
         let file_length: u64 = u32::from_le_bytes(length_buffer) as u64;
         debug_println!("file_length = {}", file_length);
 
         // create the output file
         let mut output_file_path = directory_path.clone();
         output_file_path.push(&filename);
-        let mut output_file = File::create(&output_file_path).map_err(|e| format!("Unable to create output file: {}", e))?;
+        let mut output_file =
+            File::create(&output_file_path).map_err(|e| format!("Unable to create output file: {}", e))?;
 
         let mut output_file_reader = input.take(file_length);
 
         // I don't think we need to buffer the writes for this...
-        let bytes_written = io::copy(&mut output_file_reader, &mut output_file).map_err(|e| format!("Error writing decompressed file: {}", e))?;
+        let bytes_written = io::copy(&mut output_file_reader, &mut output_file)
+            .map_err(|e| format!("Error writing decompressed file: {}", e))?;
         assert_eq!(bytes_written, file_length);
         input = output_file_reader.into_inner();
 
@@ -136,7 +157,8 @@ fn compress(directory_path: PathBuf) -> Result<(), String> {
     // enumerate files in the input directory
     let mut input_file_paths = Vec::with_capacity(2);
     for entry in fs::read_dir(directory_path).map_err(|e| format!("Unable to enumerate input directory: {}", e))? {
-        let entry = entry.map_err(|e| format!("Unable to read an entry while enumerating the input directory: {}", e))?;
+        let entry =
+            entry.map_err(|e| format!("Unable to read an entry while enumerating the input directory: {}", e))?;
         let path = entry.path();
         if !path.is_file() {
             // the directory must be flat... I think? If baro supports directory structure then color me surprised.
@@ -164,8 +186,11 @@ fn compress(directory_path: PathBuf) -> Result<(), String> {
         let mut input_file = File::open(&input_file_path).map_err(|e| format!("Unable to open input file: {}", e))?;
 
         // write the filename length prefix
-        let input_filename = input_file_path.file_name().ok_or("Unable to extract filename of input file")?
-            .to_str().ok_or("Unable to convert input filename to unicode")?;
+        let input_filename = input_file_path
+            .file_name()
+            .ok_or("Unable to extract filename of input file")?
+            .to_str()
+            .ok_or("Unable to convert input filename to unicode")?;
         let input_filename_length = input_filename.len() as u32;
         let mut input_filename_utf16: Vec<u16> = input_filename.encode_utf16().collect();
         let input_filename_buffer_u8: &[u8] = unsafe {
@@ -178,22 +203,38 @@ fn compress(directory_path: PathBuf) -> Result<(), String> {
 
         // write the filename length prefix
         let input_filename_length_prefix = input_filename_length.to_le_bytes();
-        output.write_all(&input_filename_length_prefix).map_err(|e| format!("Unable to write filename length prefix to save: {}", e))?;
+        output
+            .write_all(&input_filename_length_prefix)
+            .map_err(|e| format!("Unable to write filename length prefix to save: {}", e))?;
 
         // write the filename
-        output.write_all(input_filename_buffer_u8).map_err(|e| format!("Unable to write filename to save: {}", e))?;
+        output
+            .write_all(input_filename_buffer_u8)
+            .map_err(|e| format!("Unable to write filename to save: {}", e))?;
 
         // write the file size prefix
-        let file_size = input_file.metadata().map_err(|e| format!("Unable to read metadata for input file: {}", e))?.len();
-        let file_size_prefix: u32 = file_size.try_into().map_err(|e| format!("Input file too long (blame the Baro devs for their 4GB filesize limit): {}", e))?;
+        let file_size = input_file
+            .metadata()
+            .map_err(|e| format!("Unable to read metadata for input file: {}", e))?
+            .len();
+        let file_size_prefix: u32 = file_size.try_into().map_err(|e| {
+            format!(
+                "Input file too long (blame the Baro devs for their 4GB filesize limit): {}",
+                e
+            )
+        })?;
         let file_size_prefix = file_size_prefix.to_le_bytes();
-        output.write_all(&file_size_prefix).map_err(|e| format!("Unable to write filesize prefix to save: {}", e))?;
+        output
+            .write_all(&file_size_prefix)
+            .map_err(|e| format!("Unable to write filesize prefix to save: {}", e))?;
 
         // write the file contents
         io::copy(&mut input_file, &mut output).map_err(|e| format!("Error writing input file to save: {}", e))?;
     }
 
     // because we're using a BufWriter we should explicitly flush to disk
-    output.flush().map_err(|e| format!("Error flushing save to disk: {}", e))?;
+    output
+        .flush()
+        .map_err(|e| format!("Error flushing save to disk: {}", e))?;
     Ok(())
 }
