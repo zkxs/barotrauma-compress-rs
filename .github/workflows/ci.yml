@@ -20,7 +20,7 @@ jobs:
   cargo-deny:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: EmbarkStudios/cargo-deny-action@v2
         with:
           rust-version: "1.85.0"
@@ -33,7 +33,7 @@ jobs:
         run: rustup component add cargo
       - name: Install Clippy
         run: rustup component add rustfmt
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Format
         run: cargo fmt --check
   test:
@@ -79,7 +79,7 @@ jobs:
       - name: Install Clippy
         run: rustup component add clippy
       - name: git checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
       - name: Setup workflow cache
         uses: actions/cache@v5
         with:
