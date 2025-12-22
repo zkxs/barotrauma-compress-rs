@@ -91,7 +91,7 @@ ignore = [
 allow = [
     # Bog standard stuff
     "Apache-2.0",
-    "AGPL-3.0",
+    "AGPL-3.0-only",
     "MIT",
     # Weirder stuff
     "Unicode-3.0", # OSI but not FSF approved. Needed by unicode-ident.
